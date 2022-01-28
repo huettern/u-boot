@@ -4,11 +4,11 @@
  * Copyright (C) 2011 PetaLogix
  * Copyright (C) 2010 Xilinx, Inc. All rights reserved.
  */
-
 #include <config.h>
 #include <common.h>
 #include <cpu_func.h>
 #include <dm.h>
+#include <dm/device_compat.h>
 #include <log.h>
 #include <net.h>
 #include <malloc.h>
@@ -60,6 +60,8 @@ DECLARE_GLOBAL_DATA_PTR;
 /* Bitmasks of XAXIDMA_CR_OFFSET register */
 #define XAXIDMA_CR_RUNSTOP_MASK	0x00000001 /* Start/stop DMA channel */
 #define XAXIDMA_CR_RESET_MASK	0x00000004 /* Reset DMA engine */
+#define XAXIDMA_CR_IRQEN_MASK 0x00001000 /* Interrupt on Complete Interrupt Enable */
+#define XAXIDMA_CR_IRQDLY_MASK	0x00002000 /* Interrupt on Delay Interrupt Enable */
 
 /* Bitmasks of XAXIDMA_SR_OFFSET register */
 #define XAXIDMA_HALTED_MASK	0x00000001  /* DMA channel halted */
@@ -129,7 +131,11 @@ struct axi_regs {
 	u32 is; /* 0xC: Interrupt status */
 	u32 reserved2;
 	u32 ie; /* 0x14: Interrupt enable */
-	u32 reserved3[251];
+	u32 reserved25[6];
+	u32 ppst; /* 0x30: PCS PMA TEMAC Status (PPST) */
+	u32 reserved3[115];
+	u32 statistics[128]; /* 0x200-0x1fc: statistics counters */
+	u32 reserved35[1];
 	u32 rcw1; /* 0x404: Rx Configuration Word 1 */
 	u32 tc; /* 0x408: Tx Configuration */
 	u32 reserved4;
@@ -242,6 +248,61 @@ static u32 phywrite(struct axidma_priv *priv, u32 phyaddress, u32 registernum,
 	return 0;
 }
 
+static void dump (struct udevice *dev) {
+	struct axidma_priv *priv = dev_get_priv(dev);
+  struct axi_regs *regs = priv->iobase;
+
+  #define XTRB(x, n) ( (x & (1 << n)) != 0)
+
+  log_debug("dma tx status/control: %x/%x rx status/control: %x/%x\n", 
+    readl(&priv->dmatx->status),readl(&priv->dmatx->control), readl(&priv->dmarx->status), readl(&priv->dmarx->control));
+  u32 ppst = readl(&regs->ppst);
+  log_debug("eth is: %x ppst: %x (LinkStatus=%d, Duplex=%d, PhyLinkStatus=%d)\n", readl(&regs->is), ppst, 
+    XTRB(ppst,0), XTRB(ppst,12),XTRB(ppst,7));
+  
+  u32 bmsr = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0001);
+  log_debug("phy@3 bmsr: %x (LinkStatus=%d a/n-complete=%x RmtFlt=%d) ", bmsr,
+    XTRB(bmsr,2),XTRB(bmsr,5),XTRB(bmsr,4));
+  u32 phycr = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0010);
+  log_debug("phycr: %x (SGMII=%d) ", phycr,
+    XTRB(phycr,11));
+  u32 physts = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0011);
+  log_debug("physts: %x (LinkStatus=%d Speed=%01x Duplex=%d Sleep=%d) ", physts,
+    XTRB(physts,10), (physts & (0b11 << 14)) >> 14,XTRB(physts,13),XTRB(physts,6));
+  u32 cfg2 = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0014);
+  log_debug("cfg2: %x (SGMII-a/n=%d) ", cfg2,
+    XTRB(cfg2,7));
+  u32 cfg4 = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0031);
+  log_debug("cfg4: %x (SGMII-a/n-tmr=%x) ", cfg4,
+    (cfg4 & (0b11 << 5)) >> 5);
+  u32 sgmiianegsts = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0037);
+  log_debug("sgmiianegsts: %x (prx=%d cplt=%d) ", sgmiianegsts,
+    XTRB(sgmiianegsts,1),XTRB(sgmiianegsts,0));
+  u32 sgmiictl1 = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x00d3);
+  log_debug("sgmiictl1: %x (type=%d) ", sgmiictl1,
+    XTRB(sgmiictl1,14));
+  u32 recr = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0015);
+  log_debug("recr: %x ", recr);
+  u32 fld_cfg = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x002d);
+  log_debug("fld_cfg: %x ", fld_cfg);
+  u32 rxfsts = phy_read(priv->phydev, MDIO_DEVAD_NONE, 0x0135);
+  log_debug("rxfsts: %x \n", rxfsts);
+  
+  // bmsr = phyread(priv, 0, MDIO_DEVAD_NONE, 0x0001);
+  // log_debug("phy@0 bmsr: %x (LinkStatus=%d a/n-complete=%x RmtFlt=%d) ", bmsr,
+  //   XTRB(bmsr,2),XTRB(bmsr,5),XTRB(bmsr,4));
+  // physts = phyread(priv, 0, MDIO_DEVAD_NONE, 0x0011);
+  // log_debug("phy@0 physts: %x (LinkStatus=%d Speed=%01x Duplex=%d Sleep=%d)", physts,
+  //   XTRB(physts,10), (physts & (0b11 << 14)) >> 14,XTRB(physts,13),XTRB(physts,6));
+  // recr = phyread(priv, 0, MDIO_DEVAD_NONE, 0x0015);
+  // log_debug("recr: %x ", recr);
+  // fld_cfg = phyread(priv, 0, MDIO_DEVAD_NONE, 0x002d);
+  // log_debug("fld_cfg: %x ", fld_cfg);
+  // rxfsts = phyread(priv, 0, MDIO_DEVAD_NONE, 0x0135);
+  // log_debug("rxfsts: %x \n", rxfsts);
+}
+
+
 static int axiemac_phy_init(struct udevice *dev)
 {
 	u16 phyreg;
@@ -251,25 +312,23 @@ static int axiemac_phy_init(struct udevice *dev)
 	struct axi_regs *regs = priv->iobase;
 	struct phy_device *phydev;
 
-	u32 supported = SUPPORTED_10baseT_Half |
-			SUPPORTED_10baseT_Full |
-			SUPPORTED_100baseT_Half |
-			SUPPORTED_100baseT_Full |
-			SUPPORTED_1000baseT_Half |
+	u32 supported = SUPPORTED_1000baseT_Half |
 			SUPPORTED_1000baseT_Full;
 
 	/* Set default MDIO divisor */
+  printf("Set default MDIO divisor\n");
 	writel(XAE_MDIO_DIV_DFT | XAE_MDIO_MC_MDIOEN_MASK, &regs->mdio_mc);
 
 	if (priv->phyaddr == -1) {
 		/* Detect the PHY address */
+    printf("Detect the PHY address\n");
 		for (i = 31; i >= 0; i--) {
 			ret = phyread(priv, i, PHY_DETECT_REG, &phyreg);
 			if (!ret && (phyreg != 0xFFFF) &&
 			((phyreg & PHY_DETECT_MASK) == PHY_DETECT_MASK)) {
 				/* Found a valid PHY address */
 				priv->phyaddr = i;
-				debug("axiemac: Found valid phy address, %x\n",
+				log_debug("axiemac: Found valid phy address, %x\n",
 				      i);
 				break;
 			}
@@ -278,6 +337,11 @@ static int axiemac_phy_init(struct udevice *dev)
 
 	/* Interface - look at tsec */
 	phydev = phy_connect(priv->bus, priv->phyaddr, dev, priv->interface);
+
+	if (!phydev) {
+		dev_err(dev, "phy_connect() failed\n");
+		return -ENODEV;
+	}
 
 	phydev->supported &= supported;
 	phydev->advertising = phydev->supported;
@@ -313,18 +377,42 @@ static int setup_phy(struct udevice *dev)
 			if (ret)
 				return 0;
 		}
+
+    // Enable SGMII
+		ret = phyread(priv, priv->phyaddr, 0x0010, &temp);
+    temp |=  1 << 11;
+    ret = phywrite(priv, priv->phyaddr, 0x0010, temp);
+		ret = phyread(priv, priv->phyaddr, 0x0010, &temp);
+    if( ret || !(temp & (1<<14))) {
+		  log_debug("ERROR could not enable SGMII. Bit did not stick: %x\n", temp);
+    }
+
+    //  6-wire mode. Enable differential SGMII clock to MAC
+		ret = phyread(priv, priv->phyaddr, 0x00d3, &temp);
+    temp |=  1 << 14;
+    ret = phywrite(priv, priv->phyaddr, 0x00d3, temp);
+		ret = phyread(priv, priv->phyaddr, 0x00d3, &temp);
+    if (ret)
+      return 0;
+		printf("axiemac: Enabled PHY clkout\n");
+    if( !(temp & (1<<14))) {
+		  printf("ERROR bit did not stick: %x\n", temp);
+    }
 	}
 
+  log_debug("phy_startup\n");
 	if (phy_startup(phydev)) {
 		printf("axiemac: could not initialize PHY %s\n",
 		       phydev->dev->name);
 		return 0;
 	}
+  log_debug("phy_startup done\n");
 	if (!phydev->link) {
 		printf("%s: No link.\n", phydev->dev->name);
 		return 0;
 	}
 
+  log_debug("phy speed %d\n", phydev->speed);
 	switch (phydev->speed) {
 	case 1000:
 		speed = XAE_EMMC_LINKSPD_1000;
@@ -372,7 +460,7 @@ static void axiemac_stop(struct udevice *dev)
 	temp &= ~XAXIDMA_CR_RUNSTOP_MASK;
 	writel(temp, &priv->dmarx->control);
 
-	debug("axiemac: Halted\n");
+	log_debug("axiemac: Halted\n");
 }
 
 static int axi_ethernet_init(struct axidma_priv *priv)
@@ -420,7 +508,7 @@ static int axi_ethernet_init(struct axidma_priv *priv)
 	/* Set default MDIO divisor */
 	writel(XAE_MDIO_DIV_DFT | XAE_MDIO_MC_MDIOEN_MASK, &regs->mdio_mc);
 
-	debug("axiemac: InitHw done\n");
+	log_debug("axiemac: InitHw done\n");
 	return 0;
 }
 
@@ -470,7 +558,7 @@ static int axiemac_start(struct udevice *dev)
 	struct axi_regs *regs = priv->iobase;
 	u32 temp;
 
-	debug("axiemac: Init started\n");
+	log_debug("axiemac: Init started\n");
 	/*
 	 * Initialize AXIDMA engine. AXIDMA engine must be initialized before
 	 * AxiEthernet. During AXIDMA engine initialization, AXIDMA hardware is
@@ -509,7 +597,7 @@ static int axiemac_start(struct udevice *dev)
 
 	/* Start the hardware */
 	temp = readl(&priv->dmarx->control);
-	temp |= XAXIDMA_CR_RUNSTOP_MASK;
+	temp |= XAXIDMA_CR_RUNSTOP_MASK | XAXIDMA_CR_IRQEN_MASK | XAXIDMA_CR_IRQDLY_MASK;
 	writel(temp, &priv->dmarx->control);
 
 	/* Rx BD is ready - start */
@@ -526,14 +614,17 @@ static int axiemac_start(struct udevice *dev)
 		return -1;
 	}
 
-	debug("axiemac: Init complete\n");
+	log_debug("axiemac: Init complete\n");
 	return 0;
 }
 
 static int axiemac_send(struct udevice *dev, void *ptr, int len)
 {
 	struct axidma_priv *priv = dev_get_priv(dev);
+  struct axi_regs *regs = priv->iobase;
 	u32 timeout;
+
+  // axiemac_phy_init(dev);
 
 	if (len > PKTSIZE_ALIGN)
 		len = PKTSIZE_ALIGN;
@@ -564,13 +655,33 @@ static int axiemac_send(struct udevice *dev, void *ptr, int len)
 		temp = readl(&priv->dmatx->control);
 		temp |= XAXIDMA_CR_RUNSTOP_MASK;
 		writel(temp, &priv->dmatx->control);
-	}
+	} 
+  
+  // u32 temp = readl(&regs->statistics[0]);
+  // temp |= readl(&regs->statistics[1]);
+  // log_debug("rx bytes: (%d) %x\n", temp, temp);
+  // temp = readl(&regs->statistics[2]);
+  // temp |= readl(&regs->statistics[3]);
+  // log_debug("tx bytes: (%d) %x\n", temp, temp);
+  // temp = readl(&regs->statistics[2]);
+  // temp |= readl(&regs->statistics[3]);
+  // log_debug("tx bytes: (%d) %x\n", temp, temp);
+  // temp = readl(&regs->statistics[2]);
+  // temp |= readl(&regs->statistics[3]);
+  // log_debug("tx bytes: (%d) %x\n", temp, temp);
+
+  // u32 temp;
+  // for (unsigned i = 0; i < sizeof(regs->statistics)/sizeof(regs->statistics[0]); ++i) {
+  //     temp |= readl(&regs->statistics[i]);
+  //     log_debug("tx bytes: (%d) %x%s", temp, temp, (i % 8) == 0 ? "\n" : "");
+  // }
+  //   log_debug("\n");
 
 	/* Start transfer */
 	axienet_dma_write(&tx_bd, &priv->dmatx->tail);
 
 	/* Wait for transmission to complete */
-	debug("axiemac: Waiting for tx to be done\n");
+	log_debug("axiemac: Waiting for tx to be done\n");
 	timeout = 200;
 	while (timeout && (!(readl(&priv->dmatx->status) &
 			(XAXIDMA_IRQ_DELAY_MASK | XAXIDMA_IRQ_IOC_MASK)))) {
@@ -582,7 +693,22 @@ static int axiemac_send(struct udevice *dev, void *ptr, int len)
 		return 1;
 	}
 
-	debug("axiemac: Sending complete\n");
+  /* Clear interrupt */
+  u32 temp = readl(&priv->dmatx->status);
+  temp |= XAXIDMA_IRQ_IOC_MASK;
+  writel(temp, &priv->dmatx->status);
+
+	log_debug("axiemac: Sending complete\n");
+	udelay(10);
+	
+  dump(dev);
+
+  // log_debug("stat: ");
+  // for(unsigned i = 0; i < (sizeof(regs->statistics)/sizeof(regs->statistics[0])); i+=2) {
+  //   log_debug("%d ", readl(&regs->statistics[i]));
+  // }
+  // log_debug("\n");
+
 	return 0;
 }
 
@@ -616,7 +742,7 @@ static int axiemac_recv(struct udevice *dev, int flags, uchar **packetp)
 	if (!isrxready(priv))
 		return -1;
 
-	debug("axiemac: RX data ready\n");
+	log_debug("axiemac: RX data ready\n");
 
 	/* Disable IRQ for a moment till packet is handled */
 	temp = readl(&priv->dmarx->control);
@@ -630,6 +756,15 @@ static int axiemac_recv(struct udevice *dev, int flags, uchar **packetp)
 #ifdef DEBUG
 	print_buffer(&rxframe, &rxframe[0], 1, length, 16);
 #endif
+
+  dump(dev);
+
+  struct axi_regs *regs = priv->iobase;
+  // log_debug("stat: ");
+  // for(unsigned i = 0; i < (sizeof(regs->statistics)/sizeof(regs->statistics[0])); i+=2) {
+  //   log_debug("%d ", readl(&regs->statistics[i]));
+  // }
+  // log_debug("\n");
 
 	*packetp = rxframe;
 	return length;
@@ -664,7 +799,7 @@ static int axiemac_free_pkt(struct udevice *dev, uchar *packet, int length)
 	/* Rx BD is ready - start again */
 	axienet_dma_write(&rx_bd, &priv->dmarx->tail);
 
-	debug("axiemac: RX completed, framelength = %d\n", length);
+	log_debug("axiemac: RX completed, framelength = %d\n", length);
 
 	return 0;
 }
@@ -676,15 +811,16 @@ static int axiemac_miiphy_read(struct mii_dev *bus, int addr,
 	u16 value;
 
 	ret = phyread(bus->priv, addr, reg, &value);
-	debug("axiemac: Read MII 0x%x, 0x%x, 0x%x, %d\n", addr, reg,
-	      value, ret);
+	// log_debug("axiemac: Read MII 0x%x, 0x%x, 0x%x, %d\n", addr, reg,
+	//       value, ret);
 	return value;
 }
 
 static int axiemac_miiphy_write(struct mii_dev *bus, int addr, int devad,
 				int reg, u16 value)
 {
-	debug("axiemac: Write MII 0x%x, 0x%x, 0x%x\n", addr, reg, value);
+	log_debug("axiemac: Write MII 0x%x, 0x%x, 0x%x\n", addr, reg, value);
+  phywrite(bus->priv, 1, reg, value);
 	return phywrite(bus->priv, addr, reg, value);
 }
 
@@ -692,6 +828,8 @@ static int axi_emac_probe(struct udevice *dev)
 {
 	struct axidma_priv *priv = dev_get_priv(dev);
 	int ret;
+
+	log_debug("Probe\n");
 
 	priv->bus = mdio_alloc();
 	priv->bus->read = axiemac_miiphy_read;
@@ -710,6 +848,8 @@ static int axi_emac_probe(struct udevice *dev)
 static int axi_emac_remove(struct udevice *dev)
 {
 	struct axidma_priv *priv = dev_get_priv(dev);
+
+	log_debug("Free\n");
 
 	free(priv->phydev);
 	mdio_unregister(priv->bus);
