@@ -20,7 +20,10 @@ int spl_board_init_f(void)
 u32 spl_boot_device(void)
 {
 	/* boot from SPI flash */
-	return BOOT_DEVICE_SPI;
+	// return BOOT_DEVICE_SPI;
+
+  /* boot from FIT image already in RAM */
+	return BOOT_DEVICE_RAM;
 }
 
 #ifdef CONFIG_SPL_LOAD_FIT
