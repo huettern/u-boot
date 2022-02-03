@@ -249,6 +249,7 @@ static u32 phywrite(struct axidma_priv *priv, u32 phyaddress, u32 registernum,
 }
 
 static void dump (struct udevice *dev) {
+  return;
 	struct axidma_priv *priv = dev_get_priv(dev);
   struct axi_regs *regs = priv->iobase;
 
@@ -377,27 +378,6 @@ static int setup_phy(struct udevice *dev)
 			if (ret)
 				return 0;
 		}
-
-    // Enable SGMII
-		ret = phyread(priv, priv->phyaddr, 0x0010, &temp);
-    temp |=  1 << 11;
-    ret = phywrite(priv, priv->phyaddr, 0x0010, temp);
-		ret = phyread(priv, priv->phyaddr, 0x0010, &temp);
-    if( ret || !(temp & (1<<14))) {
-		  log_debug("ERROR could not enable SGMII. Bit did not stick: %x\n", temp);
-    }
-
-    //  6-wire mode. Enable differential SGMII clock to MAC
-		ret = phyread(priv, priv->phyaddr, 0x00d3, &temp);
-    temp |=  1 << 14;
-    ret = phywrite(priv, priv->phyaddr, 0x00d3, temp);
-		ret = phyread(priv, priv->phyaddr, 0x00d3, &temp);
-    if (ret)
-      return 0;
-		printf("axiemac: Enabled PHY clkout\n");
-    if( !(temp & (1<<14))) {
-		  printf("ERROR bit did not stick: %x\n", temp);
-    }
 	}
 
   log_debug("phy_startup\n");
@@ -681,7 +661,7 @@ static int axiemac_send(struct udevice *dev, void *ptr, int len)
 	axienet_dma_write(&tx_bd, &priv->dmatx->tail);
 
 	/* Wait for transmission to complete */
-	log_debug("axiemac: Waiting for tx to be done\n");
+	// log_debug("axiemac: Waiting for tx to be done\n");
 	timeout = 200;
 	while (timeout && (!(readl(&priv->dmatx->status) &
 			(XAXIDMA_IRQ_DELAY_MASK | XAXIDMA_IRQ_IOC_MASK)))) {
@@ -698,7 +678,7 @@ static int axiemac_send(struct udevice *dev, void *ptr, int len)
   temp |= XAXIDMA_IRQ_IOC_MASK;
   writel(temp, &priv->dmatx->status);
 
-	log_debug("axiemac: Sending complete\n");
+	// log_debug("axiemac: Sending complete\n");
 	udelay(10);
 	
   dump(dev);
@@ -742,7 +722,7 @@ static int axiemac_recv(struct udevice *dev, int flags, uchar **packetp)
 	if (!isrxready(priv))
 		return -1;
 
-	log_debug("axiemac: RX data ready\n");
+	// log_debug("axiemac: RX data ready\n");
 
 	/* Disable IRQ for a moment till packet is handled */
 	temp = readl(&priv->dmarx->control);
@@ -799,7 +779,7 @@ static int axiemac_free_pkt(struct udevice *dev, uchar *packet, int length)
 	/* Rx BD is ready - start again */
 	axienet_dma_write(&rx_bd, &priv->dmarx->tail);
 
-	log_debug("axiemac: RX completed, framelength = %d\n", length);
+	// log_debug("axiemac: RX completed, framelength = %d\n", length);
 
 	return 0;
 }
@@ -819,7 +799,7 @@ static int axiemac_miiphy_read(struct mii_dev *bus, int addr,
 static int axiemac_miiphy_write(struct mii_dev *bus, int addr, int devad,
 				int reg, u16 value)
 {
-	log_debug("axiemac: Write MII 0x%x, 0x%x, 0x%x\n", addr, reg, value);
+	// log_debug("axiemac: Write MII 0x%x, 0x%x, 0x%x\n", addr, reg, value);
   phywrite(bus->priv, 1, reg, value);
 	return phywrite(bus->priv, addr, reg, value);
 }
