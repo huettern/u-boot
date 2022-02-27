@@ -5,7 +5,9 @@
 
 #define CONFIG_TFTP_TSIZE
 
+// fdt_high=0xffffffff to use FDT in-place
 #define CONFIG_EXTRA_ENV_SETTINGS \
+	"fdt_high=0xffffffff\0" \
 	"tftptimeout=1000\0" \
 	"tftptimeoutcountmax=1000\0"
 
@@ -23,7 +25,8 @@
 #define CONFIG_SPL_STACK	0x70018000
 #endif
 
-#define CONFIG_SYS_SDRAM_BASE		0x80000000
+// OpenSBI is at 0x80000000
+#define CONFIG_SYS_SDRAM_BASE		0x80200000
 #define CONFIG_SYS_INIT_SP_ADDR		(CONFIG_SYS_SDRAM_BASE + SZ_2M)
 
 #define CONFIG_SYS_LOAD_ADDR		(CONFIG_SYS_SDRAM_BASE + SZ_2M)
