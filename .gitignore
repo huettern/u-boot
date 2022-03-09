@@ -95,3 +95,8 @@ GTAGS
 
 # Python cache
 __pycache__
+
+# don't know where these come from
+itb.fit.fit
+itb.fit.itb
+itb.map
