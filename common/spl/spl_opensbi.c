@@ -77,6 +77,13 @@ void spl_invoke_opensbi(struct spl_image_info *spl_image)
 	opensbi_entry = (void (*)(ulong, ulong, ulong))spl_image->entry_point;
 	invalidate_icache_all();
 
+  printf(" opensbi_info.magic %lx\n", opensbi_info.magic);
+  printf(" opensbi_info.version %lx\n", opensbi_info.version);
+  printf(" opensbi_info.next_addr %lx\n", opensbi_info.next_addr);
+  printf(" opensbi_info.next_mode %lx\n", opensbi_info.next_mode);
+  printf(" opensbi_info.options %lx\n", opensbi_info.options);
+  printf(" opensbi_info.boot_hart %lx\n", opensbi_info.boot_hart);
+
 #ifdef CONFIG_SPL_SMP
 	/*
 	 * Start OpenSBI on all secondary harts and wait for acknowledgment.
