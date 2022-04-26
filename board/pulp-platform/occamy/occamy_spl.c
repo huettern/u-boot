@@ -4,14 +4,6 @@
 #include <log.h>
 #include <asm/spl.h>
 
-#define SOC_CTRL_BASE 0x2000000
-#define ISOLATE_0 0xa0
-#define ISOLATE_1 0xa4
-#define ISOLATED_0 0xa8
-#define ISOLATED_1 0xac
-#define SOC_CTRL(reg) *(int32_t*)(SOC_CTRL_BASE + reg)
-
-
 int spl_board_init_f(void)
 {
 	return 0;
@@ -19,11 +11,7 @@ int spl_board_init_f(void)
 
 u32 spl_boot_device(void)
 {
-	/* boot from SPI flash */
-	// return BOOT_DEVICE_SPI;
-
-  /* boot from FIT image already in RAM */
-	return BOOT_DEVICE_RAM;
+	return BOOT_DEVICE_SPI;
 }
 
 #ifdef CONFIG_SPL_LOAD_FIT
