@@ -8,6 +8,7 @@
  * Heiko Schocher, DENX Software Engineering, hs@denx.de.
  */
 
+#define DEBUG
 #include <common.h>
 #include <image.h>
 #include <log.h>

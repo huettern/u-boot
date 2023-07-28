@@ -3,7 +3,7 @@
  * Copyright (C) 2016 Google, Inc
  * Written by Simon Glass <sjg@chromium.org>
  */
-
+#define DEBUG
 #include <common.h>
 #include <errno.h>
 #include <fpga.h>

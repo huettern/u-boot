@@ -4,7 +4,7 @@
  *
  * Copyright (C) 2015 - 2016 Xilinx, Inc.
  */
-
+#define DEBUG
 #include <config.h>
 #include <common.h>
 #include <log.h>
@@ -36,7 +36,7 @@ static int xilinxphy_startup(struct phy_device *phydev)
 	int err;
 	int status = 0;
 
-	debug("%s\n", __func__);
+	log_debug("%s\n", __func__);
 	/* Update the link, but return if there
 	 * was an error
 	 */
@@ -102,7 +102,7 @@ static int xilinxphy_of_init(struct phy_device *phydev)
 	u32 phytype;
 	ofnode node;
 
-	debug("%s\n", __func__);
+	log_debug("%s\n", __func__);
 	node = phy_get_ofnode(phydev);
 	if (!ofnode_valid(node))
 		return -EINVAL;
@@ -118,7 +118,7 @@ static int xilinxphy_config(struct phy_device *phydev)
 {
 	int temp;
 
-	debug("%s\n", __func__);
+	log_debug("%s\n", __func__);
 	xilinxphy_of_init(phydev);
 	temp = phy_read(phydev, MDIO_DEVAD_NONE, MII_BMCR);
 	temp &= XPCSPMA_PHY_CTRL_ISOLATE_DISABLE;
